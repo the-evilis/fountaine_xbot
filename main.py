@@ -578,7 +578,27 @@ def _build_static_school_info(lang: str) -> str:
         )
 
 
-async def ask_chatgpt_rag(question: str, lang: str) -> str:
+async def _log_gpt_to_sheet(username: str, full_name: str, question: str, answer: str):
+    if not spreadsheet:
+        return
+    try:
+        try:
+            log_sheet = spreadsheet.worksheet("GPT Logs")
+        except gspread.exceptions.WorksheetNotFound:
+            log_sheet = spreadsheet.add_worksheet(title="GPT Logs", rows=1000, cols=5)
+            await asyncio.to_thread(log_sheet.append_row, ["Дата", "@username", "Имя", "Вопрос", "Ответ GPT"])
+        await asyncio.to_thread(log_sheet.append_row, [
+            datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            f"@{username}" if username else "—",
+            full_name,
+            question,
+            answer
+        ])
+    except Exception as e:
+        logger.error(f"GPT log sheet error: {e}")
+
+
+async def ask_chatgpt_rag(question: str, lang: str, username: str = "", full_name: str = "") -> str:
     if not client:
         return None
     try:
@@ -650,6 +670,7 @@ async def ask_chatgpt_rag(question: str, lang: str) -> str:
         )
         answer = response.choices[0].message.content.strip()
         logger.info(f"ChatGPT answer: {answer[:100]}...")
+        await _log_gpt_to_sheet(username, full_name, question, answer)
 
         no_answer_phrases = ["я не знаю ответ на этот вопрос", "мен бул сурамга жооп бере албайм"]
         if any(p in answer.lower() for p in no_answer_phrases):
@@ -945,7 +966,9 @@ async def handle_ask_question(message: types.Message, state: FSMContext):
     await message.bot.send_chat_action(message.chat.id, "typing")
     logger.info(f"Question from {message.from_user.id}: {question_text}")
 
-    answer = await ask_chatgpt_rag(question_text, lang)
+    username = message.from_user.username or ""
+    full_name = message.from_user.full_name or ""
+    answer = await ask_chatgpt_rag(question_text, lang, username=username, full_name=full_name)
 
     if answer:
         await message.answer(f"{TEXTS[lang]['question_received']}\n\n{answer}")
