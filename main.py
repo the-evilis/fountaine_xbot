@@ -1,4 +1,5 @@
 import asyncio
+import json
 import logging
 import os
 import re
@@ -36,6 +37,7 @@ logger = logging.getLogger(__name__)
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 ADMIN_CHAT_ID_STR = os.getenv('ADMIN_CHAT_ID', '0')
 GOOGLE_SHEETS_ID = os.getenv('GOOGLE_SHEETS_ID')
+GOOGLE_CREDENTIALS_JSON = os.getenv('GOOGLE_CREDENTIALS_JSON')
 SERVICE_ACCOUNT_FILE = os.getenv('SERVICE_ACCOUNT_FILE', 'service_account.json')
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
@@ -60,10 +62,16 @@ gc = spreadsheet = sheet = faq_sheet = None
 
 if GOOGLE_SHEETS_ID:
     try:
-        creds = Credentials.from_service_account_file(
-            SERVICE_ACCOUNT_FILE,
-            scopes=['https://www.googleapis.com/auth/spreadsheets']
-        )
+        if GOOGLE_CREDENTIALS_JSON:
+            creds = Credentials.from_service_account_info(
+                json.loads(GOOGLE_CREDENTIALS_JSON),
+                scopes=['https://www.googleapis.com/auth/spreadsheets']
+            )
+        else:
+            creds = Credentials.from_service_account_file(
+                SERVICE_ACCOUNT_FILE,
+                scopes=['https://www.googleapis.com/auth/spreadsheets']
+            )
         gc = gspread.authorize(creds)
         spreadsheet = gc.open_by_key(GOOGLE_SHEETS_ID)
         sheet = spreadsheet.sheet1
