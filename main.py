@@ -952,6 +952,10 @@ async def handle_ask_question(message: types.Message, state: FSMContext):
     lang = data.get("language", "ru")
     question_text = message.text.strip()
 
+    if question_text in (TEXTS[lang]["back_to_menu"], TEXTS["ru"]["back_to_menu"], TEXTS["ky"]["back_to_menu"]):
+        await show_main_menu(message, state, lang)
+        return
+
     if len(question_text) < 3:
         await message.answer(TEXTS[lang]["invalid_question"])
         return
@@ -971,7 +975,7 @@ async def handle_ask_question(message: types.Message, state: FSMContext):
     answer = await ask_chatgpt_rag(question_text, lang, username=username, full_name=full_name)
 
     if answer:
-        await message.answer(f"{TEXTS[lang]['question_received']}\n\n{answer}")
+        await message.answer(answer)
     else:
         await message.answer(
             f"{TEXTS[lang]['ai_dont_know']}\n\n"
