@@ -1,0 +1,963 @@
+import logging
+import os
+import re
+import sys
+from datetime import datetime
+
+# ✅ ИСПРАВЛЕНИЕ ДЛЯ WINDOWS
+if sys.platform == 'win32':
+    os.environ['PYTHONIOENCODING'] = 'utf-8'
+    # Альтернатива для консоли Windows
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+
+from aiogram import Bot, Dispatcher, types, F
+from aiogram.filters import Command, StateFilter
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
+from dotenv import load_dotenv
+import gspread
+from google.oauth2.service_account import Credentials
+
+load_dotenv()
+
+# Логирование с UTF-8
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('bot_logs.txt', encoding='utf-8'),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# Переменные окружения
+BOT_TOKEN = os.getenv('BOT_TOKEN')
+ADMIN_CHAT_ID = int(os.getenv('ADMIN_CHAT_ID', '0'))
+GOOGLE_SHEETS_ID = os.getenv('GOOGLE_SHEETS_ID')
+SERVICE_ACCOUNT_FILE = os.getenv('SERVICE_ACCOUNT_FILE', 'service_account.json')
+
+# Google Sheets
+try:
+    creds = Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_FILE,
+        scopes=['https://www.googleapis.com/auth/spreadsheets']
+    )
+    client = gspread.authorize(creds)
+    sheet = client.open_by_key(GOOGLE_SHEETS_ID).worksheet('Лист1')
+except Exception as e:
+    logger.error(f"Google Sheets error: {e}")
+    sheet = None
+
+# Состояния
+class RegistrationStates(StatesGroup):
+    waiting_for_language = State()
+    waiting_for_registration_choice = State()
+    waiting_for_name = State()
+    waiting_for_phone = State()
+    waiting_for_level = State()
+    waiting_for_time = State()
+    waiting_for_goal = State()
+    registration_summary = State()
+    editing_field = State()
+    faq_view = State()
+    schedule_view = State()
+    reviews_view = State()
+    prices_view = State()
+    contacts_view = State()
+    settings_view = State()
+    main_menu = State()
+    ask_question = State()
+
+# Тексты (русский + кыргызский)
+TEXTS = {
+    "ru": {
+        "welcome": "👋 Добро пожаловать в Fountaine English School!",
+        "choose_language": "Выберите язык / Тилди тандаңыз:",
+        "russian": "🇷🇺 Русский",
+        "kyrgyz": "🇰🇬 Кыргызский",
+        "want_register": "Хотите зарегистрироваться на пробный урок?",
+        "yes": "✅ Да",
+        "no": "❌ Нет",
+        "main_menu": "📋 Главное меню",
+        "faq": "❓ F.A.Q",
+        "ask_question": "💬 Задать вопрос",
+        "register": "📝 Зарегистрироваться",
+        "prices": "💰 Цены",
+        "schedule": "📅 Расписание",
+        "reviews": "⭐ Отзывы",
+        "contacts": "📞 Контакты",
+        "settings": "⚙️ Настройки",
+        "back_to_menu": "◀️ Вернуться в меню",
+        
+        # Регистрация
+        "enter_name": "Введите ваше имя:",
+        "invalid_name": "❌ Имя должно содержать только буквы и пробелы. Попробуйте снова:",
+        "enter_phone": "Введите ваш номер телефона:",
+        "invalid_phone": "❌ Некорректный номер. Попробуйте снова (например: +996 700 123 456):",
+        "choose_level": "Выберите ваш уровень английского:",
+        "level_beginner": "🌱 Beginner - для начинающих (A1)",
+        "level_elementary": "📖 Elementary - базовый уровень (A2)",
+        "level_intermediate": "🎯 Intermediate - средний уровень (B1)",
+        "level_upper": "🔥 Upper-Intermediate - продвинутый (B2)",
+        "level_unknown": "❓ Не знаю / Тестировать",
+        "enter_time": "Когда вам удобно заниматься?",
+        "time_morning": "🌅 Утро (9:00-12:00)",
+        "time_afternoon": "☀️ День (12:00-17:00)",
+        "time_evening": "🌙 Вечер (17:00-21:00)",
+        "time_flexible": "⏰ Гибкое расписание",
+        "invalid_time": "❌ Пожалуйста, выберите время:",
+        "enter_goal": "Какая ваша цель?",
+        "goal_exam": "📚 Подготовка к экзамену",
+        "goal_conversation": "💬 Разговорный английский",
+        "goal_business": "💼 Деловой английский",
+        "goal_general": "🎓 Общее развитие",
+        "goal_other": "✍️ Другое",
+        
+        # Резюме
+        "summary": "📋 Ваши данные:",
+        "name": "Имя",
+        "phone": "Телефон",
+        "level": "Уровень",
+        "time": "Время",
+        "goal": "Цель",
+        "edit": "✏️ Редактировать",
+        "edit_name": "✏️ Изменить имя",
+        "edit_phone": "✏️ Изменить телефон",
+        "edit_level": "✏️ Изменить уровень",
+        "edit_time": "✏️ Изменить время",
+        "edit_goal": "✏️ Изменить цель",
+        "confirm": "✅ Подтвердить",
+        "success": "✅ Спасибо! Мы свяжемся с вами в ближайшее время.",
+        "probny_urok": "🎁 Пробный урок - БЕСПЛАТНО!",
+        
+        # FAQ
+        "faq_q1": "Как долго длится урок?",
+        "faq_a1": "Стандартный урок длится 60 минут. Мы также предлагаем интенсивные курсы по 90 минут.",
+        "faq_q2": "Какой минимальный уровень?",
+        "faq_a2": "Мы принимаем студентов с любым уровнем, начиная с нулевого (A1). Сначала вы пройдёте тестирование.",
+        "faq_q3": "Есть ли скидки?",
+        "faq_a3": "Да! При оплате 4+ уроков скидка 10%. При оплате 8+ уроков скидка 15%.",
+        "faq_q4": "Как проходят занятия?",
+        "faq_a4": "Все занятия проводятся онлайн через Zoom. Вам нужен только интернет и микрофон.",
+        
+        # Расписание
+        "schedule_title": "📅 Расписание занятий:",
+        "monday": "Понедельник",
+        "tuesday": "Вторник",
+        "wednesday": "Среда",
+        "thursday": "Четверг",
+        "friday": "Пятница",
+        "saturday": "Суббота",
+        "sunday": "Воскресенье",
+        
+        # Отзывы
+        "reviews_title": "⭐ Отзывы студентов:",
+        "review_1": "⭐⭐⭐⭐⭐ Отличные преподаватели! За 3 месяца я заметил большой прогресс. - Алексей",
+        "review_2": "⭐⭐⭐⭐⭐ Очень удобное расписание и гибкие цены. Рекомендую! - Мария",
+        "review_3": "⭐⭐⭐⭐⭐ Лучшая школа в городе. Преподаватели очень внимательные. - Иван",
+        
+        # Цены
+        "prices_title": "💰 Наши цены:",
+        "price_1": "1 урок: 500 сом",
+        "price_2": "4 урока (пакет): 1800 сом (-10%)",
+        "price_3": "8 уроков (пакет): 3400 сом (-15%)",
+        "price_4": "Пробный урок: БЕСПЛАТНО 🎁",
+        "record_now": "📝 Записаться сейчас",
+        
+        # Контакты
+        "contacts_title": "📞 Контакты:",
+        "contact_phone": "📱 Телефон: +996 700 123 456",
+        "contact_email": "📧 Email: info@fountaine.kg",
+        "contact_instagram": "📸 Instagram: @fountaine.ai",
+        "contact_location": "📍 Адрес: Бишкек, ул. Чуй 123",
+        "call_admin": "☎️ Позвонить администратору",
+        
+        # Задать вопрос
+        "ask_question_text": "Напишите ваш вопрос, и мы ответим вам в ближайшее время:",
+        "question_received": "✅ Спасибо за вопрос! Мы ответим вам в ближайшее время.",
+        "invalid_question": "❌ Вопрос слишком короткий. Пожалуйста, напишите подробнее:",
+        
+        # Другое
+        "admin_notification": "📬 Новая регистрация!",
+        "admin_question": "❓ Новый вопрос от пользователя!",
+        "stats": "📊 Статистика",
+        "help": "ℹ️ Справка",
+        "change_language": "🌐 Сменить язык",
+        "sheets_error": "⚠️ Ошибка при сохранении данных",
+        "sheets_not_configured": "⚠️ Google Sheets не подключен",
+    },
+    "ky": {
+        "welcome": "👋 Fountaine English School'ге добро пожаловать!",
+        "choose_language": "Тилди тандаңыз / Выберите язык:",
+        "russian": "🇷🇺 Русский",
+        "kyrgyz": "🇰🇬 Кыргызский",
+        "want_register": "Сынак сабакка катталгыңыз келеби?",
+        "yes": "✅ Ооба",
+        "no": "❌ Жок",
+        "main_menu": "📋 Башкы меню",
+        "faq": "❓ F.A.Q",
+        "ask_question": "💬 Сурам берүү",
+        "register": "📝 Катталуу",
+        "prices": "💰 Баалар",
+        "schedule": "📅 Расписание",
+        "reviews": "⭐ Сын-пикирлер",
+        "contacts": "📞 Байланыш",
+        "settings": "⚙️ Параметрлер",
+        "back_to_menu": "◀️ Менюгө кайтуу",
+        
+        # Регистрация
+        "enter_name": "Атыңызды киргизиңиз:",
+        "invalid_name": "❌ Ат тек тамгалар жана боштуктарды камтышы керек. Кайра аракет кылыңыз:",
+        "enter_phone": "Телефон номериңизди киргизиңиз:",
+        "invalid_phone": "❌ Туура эмес номер. Кайра аракет кылыңыз (+996 700 123 456):",
+        "choose_level": "Англис тилинин деңгээлин тандаңыз:",
+        "level_beginner": "🌱 Beginner - баштоочулар үчүн (A1)",
+        "level_elementary": "📖 Elementary - негизги деңгээл (A2)",
+        "level_intermediate": "🎯 Intermediate - орто деңгээл (B1)",
+        "level_upper": "🔥 Upper-Intermediate - продвинутый (B2)",
+        "level_unknown": "❓ Билбейм / Тестирлөө",
+        "enter_time": "Качан окуу ыңызга ыңгайлуу?",
+        "time_morning": "🌅 Таңкы (9:00-12:00)",
+        "time_afternoon": "☀️ Түндүк (12:00-17:00)",
+        "time_evening": "🌙 Кечки (17:00-21:00)",
+        "time_flexible": "⏰ Ийкемдүү расписание",
+        "invalid_time": "❌ Убакытты тандаңыз:",
+        "enter_goal": "Сиздин максатыңыз кандай?",
+        "goal_exam": "📚 Экзаменге даярдык",
+        "goal_conversation": "💬 Сүйлөшүү англисчеси",
+        "goal_business": "💼 Иш англисчеси",
+        "goal_general": "🎓 Жалпы өнүгүү",
+        "goal_other": "✍️ Башка",
+        
+        # Резюме
+        "summary": "📋 Сиздин маалыматыңыз:",
+        "name": "Ат",
+        "phone": "Телефон",
+        "level": "Деңгээл",
+        "time": "Убакыт",
+        "goal": "Максат",
+        "edit": "✏️ Өзгөртүү",
+        "edit_name": "✏️ Атты өзгөртүү",
+        "edit_phone": "✏️ Телефонду өзгөртүү",
+        "edit_level": "✏️ Деңгээлди өзгөртүү",
+        "edit_time": "✏️ Убакытты өзгөртүү",
+        "edit_goal": "✏️ Максатты өзгөртүү",
+        "confirm": "✅ Ырастоо",
+        "success": "✅ Рахмат! Биз сизге жакын убакытта байланыш алабыз.",
+        "probny_urok": "🎁 Сынак сабак - АКЫСЫЗ!",
+        
+        # FAQ
+        "faq_q1": "Сабак канча убакыт созулат?",
+        "faq_a1": "Стандарттык сабак 60 минут созулат. Биз 90 минуттук интенсивдүү курстарды да сунуштайбыз.",
+        "faq_q2": "Минималдык деңгээл кандай?",
+        "faq_a2": "Биз нөлдөн баштап (A1) каалаган деңгээлдеги студенттерди кабыл алабыз. Адегенде сиз тестирлөөдөн өтөсүз.",
+        "faq_q3": "Арзандатуулар барбы?",
+        "faq_a3": "Ооба! 4+ сабак төлөгөндө 10% арзандатуу. 8+ сабак төлөгөндө 15% арзандатуу.",
+        "faq_q4": "Сабактар кандай өтөт?",
+        "faq_a4": "Бардык сабактар Zoom аркылуу онлайнда өтөт. Сизге интернет жана микрофон гана керек.",
+        
+        # Расписание
+        "schedule_title": "📅 Сабактардын расписаниеси:",
+        "monday": "Дүйшөмбү",
+        "tuesday": "Шейшемби",
+        "wednesday": "Чаршемби",
+        "thursday": "Бейшемби",
+        "friday": "Жума",
+        "saturday": "Ишемби",
+        "sunday": "Жекшемби",
+        
+        # Отзывы
+        "reviews_title": "⭐ Студенттердин сын-пикирлери:",
+        "review_1": "⭐⭐⭐⭐⭐ Керемет мугалимдер! 3 айда чоң прогресс көрдүм. - Алексей",
+        "review_2": "⭐⭐⭐⭐⭐ Өтө ыңгайлуу расписание жана ийкемдүү баалар. Сунуштайм! - Мария",
+        "review_3": "⭐⭐⭐⭐⭐ Шаардын эң жакшы мектеби. Мугалимдер өтө кунт коюшат. - Иван",
+        
+        # Цены
+        "prices_title": "💰 Биздин баалар:",
+        "price_1": "1 сабак: 500 сом",
+        "price_2": "4 сабак (пакет): 1800 сом (-10%)",
+        "price_3": "8 сабак (пакет): 3400 сом (-15%)",
+        "price_4": "Сынак сабак: АКЫСЫЗ 🎁",
+        "record_now": "📝 Азыр катталуу",
+        
+        # Контакты
+        "contacts_title": "📞 Байланыш:",
+        "contact_phone": "📱 Телефон: +996 700 123 456",
+        "contact_email": "📧 Email: info@fountaine.kg",
+        "contact_instagram": "📸 Instagram: @fountaine.ai",
+        "contact_location": "📍 Дареги: Бишкек, Чуй көчөсү 123",
+        "call_admin": "☎️ Администраторго чалуу",
+        
+        # Задать вопрос
+        "ask_question_text": "Сиздин сурамды жазыңыз, биз жакын убакытта жооп беребиз:",
+        "question_received": "✅ Сурамыңыз үчүн рахмат! Биз жакын убакытта жооп беребиз.",
+        "invalid_question": "❌ Сурам өтө кыска. Сураңыз толугураак:",
+        
+        # Другое
+        "admin_notification": "📬 Жаңы катталуу!",
+        "admin_question": "❓ Пользователь сурам берди!",
+        "stats": "📊 Статистика",
+        "help": "ℹ️ Жардам",
+        "change_language": "🌐 Тилди өзгөртүү",
+        "sheets_error": "⚠️ Маалыматты сактоодо ката",
+        "sheets_not_configured": "⚠️ Google Sheets туташтырылган эмес",
+    }
+}
+
+# Функции валидации
+def validate_name(text):
+    cleaned = text.strip()
+    pattern = r"^[а-яА-ЯёЁa-zA-Z\s]+$"
+    return bool(re.match(pattern, cleaned)) and len(cleaned) > 0
+
+def validate_phone(text):
+    cleaned = re.sub(r'\D', '', text)
+    return len(cleaned) >= 9
+
+def validate_time(text):
+    cleaned = text.strip()
+    return len(cleaned) > 0
+
+def validate_goal(text):
+    cleaned = text.strip()
+    return len(cleaned) > 0
+
+# Клавиатуры
+def get_language_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="🇷🇺 Русский"), KeyboardButton(text="🇰🇬 Кыргызский")]
+        ],
+        resize_keyboard=True
+    )
+
+def get_yes_no_keyboard(lang):
+    yes_text = TEXTS[lang]["yes"]
+    no_text = TEXTS[lang]["no"]
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=yes_text), KeyboardButton(text=no_text)]],
+        resize_keyboard=True
+    )
+
+def get_main_menu_keyboard(lang):
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=TEXTS[lang]["faq"]), KeyboardButton(text=TEXTS[lang]["ask_question"])],
+            [KeyboardButton(text=TEXTS[lang]["register"]), KeyboardButton(text=TEXTS[lang]["prices"])],
+            [KeyboardButton(text=TEXTS[lang]["schedule"]), KeyboardButton(text=TEXTS[lang]["reviews"])],
+            [KeyboardButton(text=TEXTS[lang]["contacts"]), KeyboardButton(text=TEXTS[lang]["settings"])],
+        ],
+        resize_keyboard=True
+    )
+
+def get_level_keyboard(lang):
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=TEXTS[lang]["level_beginner"])],
+            [KeyboardButton(text=TEXTS[lang]["level_elementary"])],
+            [KeyboardButton(text=TEXTS[lang]["level_intermediate"])],
+            [KeyboardButton(text=TEXTS[lang]["level_upper"])],
+            [KeyboardButton(text=TEXTS[lang]["level_unknown"])],
+        ],
+        resize_keyboard=True
+    )
+
+def get_time_keyboard(lang):
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=TEXTS[lang]["time_morning"])],
+            [KeyboardButton(text=TEXTS[lang]["time_afternoon"])],
+            [KeyboardButton(text=TEXTS[lang]["time_evening"])],
+            [KeyboardButton(text=TEXTS[lang]["time_flexible"])],
+        ],
+        resize_keyboard=True
+    )
+
+def get_goal_keyboard(lang):
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=TEXTS[lang]["goal_exam"])],
+            [KeyboardButton(text=TEXTS[lang]["goal_conversation"])],
+            [KeyboardButton(text=TEXTS[lang]["goal_business"])],
+            [KeyboardButton(text=TEXTS[lang]["goal_general"])],
+            [KeyboardButton(text=TEXTS[lang]["goal_other"])],
+        ],
+        resize_keyboard=True
+    )
+
+def get_faq_keyboard(lang):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=TEXTS[lang]["faq_q1"], callback_data="faq_1")],
+            [InlineKeyboardButton(text=TEXTS[lang]["faq_q2"], callback_data="faq_2")],
+            [InlineKeyboardButton(text=TEXTS[lang]["faq_q3"], callback_data="faq_3")],
+            [InlineKeyboardButton(text=TEXTS[lang]["faq_q4"], callback_data="faq_4")],
+            [InlineKeyboardButton(text=TEXTS[lang]["back_to_menu"], callback_data="back_to_menu")],
+        ]
+    )
+
+def get_schedule_keyboard(lang):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=TEXTS[lang]["monday"], callback_data="schedule_mon")],
+            [InlineKeyboardButton(text=TEXTS[lang]["tuesday"], callback_data="schedule_tue")],
+            [InlineKeyboardButton(text=TEXTS[lang]["wednesday"], callback_data="schedule_wed")],
+            [InlineKeyboardButton(text=TEXTS[lang]["thursday"], callback_data="schedule_thu")],
+            [InlineKeyboardButton(text=TEXTS[lang]["friday"], callback_data="schedule_fri")],
+            [InlineKeyboardButton(text=TEXTS[lang]["saturday"], callback_data="schedule_sat")],
+            [InlineKeyboardButton(text=TEXTS[lang]["sunday"], callback_data="schedule_sun")],
+            [InlineKeyboardButton(text=TEXTS[lang]["back_to_menu"], callback_data="back_to_menu")],
+        ]
+    )
+
+def get_reviews_keyboard(lang):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=TEXTS[lang]["record_now"], callback_data="register")],
+            [InlineKeyboardButton(text=TEXTS[lang]["back_to_menu"], callback_data="back_to_menu")],
+        ]
+    )
+
+def get_prices_keyboard(lang):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=TEXTS[lang]["record_now"], callback_data="register")],
+            [InlineKeyboardButton(text=TEXTS[lang]["back_to_menu"], callback_data="back_to_menu")],
+        ]
+    )
+
+def get_contacts_keyboard(lang):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=TEXTS[lang]["call_admin"], callback_data="call_admin")],
+            [InlineKeyboardButton(text=TEXTS[lang]["back_to_menu"], callback_data="back_to_menu")],
+        ]
+    )
+
+def get_edit_keyboard(lang):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=TEXTS[lang]["edit_name"], callback_data="edit_name")],
+            [InlineKeyboardButton(text=TEXTS[lang]["edit_phone"], callback_data="edit_phone")],
+            [InlineKeyboardButton(text=TEXTS[lang]["edit_level"], callback_data="edit_level")],
+            [InlineKeyboardButton(text=TEXTS[lang]["edit_time"], callback_data="edit_time")],
+            [InlineKeyboardButton(text=TEXTS[lang]["edit_goal"], callback_data="edit_goal")],
+            [InlineKeyboardButton(text=TEXTS[lang]["confirm"], callback_data="confirm_registration")],
+        ]
+    )
+
+def get_settings_keyboard(lang):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text=TEXTS[lang]["change_language"], callback_data="change_language")],
+            [InlineKeyboardButton(text=TEXTS[lang]["back_to_menu"], callback_data="back_to_menu")],
+        ]
+    )
+
+# Обработчики
+async def start(message: types.Message, state: FSMContext):
+    logger.info(f"User {message.from_user.id} started bot")
+    await message.answer(
+        TEXTS["ru"]["welcome"],
+        reply_markup=get_language_keyboard()
+    )
+    await state.set_state(RegistrationStates.waiting_for_language)
+
+async def handle_language(message: types.Message, state: FSMContext):
+    if "Русский" in message.text:
+        lang = "ru"
+    elif "Кыргызский" in message.text:
+        lang = "ky"
+    else:
+        return
+    
+    await state.update_data(language=lang)
+    logger.info(f"User {message.from_user.id} selected language: {lang}")
+    
+    await message.answer(
+        TEXTS[lang]["want_register"],
+        reply_markup=get_yes_no_keyboard(lang)
+    )
+    await state.set_state(RegistrationStates.waiting_for_registration_choice)
+
+async def handle_registration_choice(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get("language", "ru")
+    
+    if TEXTS[lang]["yes"] in message.text:
+        await message.answer(
+            TEXTS[lang]["enter_name"],
+            reply_markup=types.ReplyKeyboardRemove()
+        )
+        await state.set_state(RegistrationStates.waiting_for_name)
+    else:
+        await message.answer(
+            TEXTS[lang]["main_menu"],
+            reply_markup=get_main_menu_keyboard(lang)
+        )
+        await state.set_state(RegistrationStates.main_menu)
+
+async def handle_name(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get("language", "ru")
+    
+    if not validate_name(message.text):
+        await message.answer(TEXTS[lang]["invalid_name"])
+        return
+    
+    await state.update_data(name=message.text.strip())
+    await message.answer(TEXTS[lang]["enter_phone"])
+    await state.set_state(RegistrationStates.waiting_for_phone)
+
+async def handle_phone(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get("language", "ru")
+    
+    if not validate_phone(message.text):
+        await message.answer(TEXTS[lang]["invalid_phone"])
+        return
+    
+    await state.update_data(phone=message.text.strip())
+    await message.answer(
+        TEXTS[lang]["choose_level"],
+        reply_markup=get_level_keyboard(lang)
+    )
+    await state.set_state(RegistrationStates.waiting_for_level)
+
+async def handle_level(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get("language", "ru")
+    
+    level = message.text.strip()
+    await state.update_data(level=level)
+    
+    await message.answer(
+        TEXTS[lang]["enter_time"],
+        reply_markup=get_time_keyboard(lang)
+    )
+    await state.set_state(RegistrationStates.waiting_for_time)
+
+async def handle_time(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get("language", "ru")
+    
+    time_text = message.text.strip()
+    await state.update_data(time=time_text)
+    
+    await message.answer(
+        TEXTS[lang]["enter_goal"],
+        reply_markup=get_goal_keyboard(lang)
+    )
+    await state.set_state(RegistrationStates.waiting_for_goal)
+
+async def handle_goal(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get("language", "ru")
+    
+    goal_text = message.text.strip()
+    await state.update_data(goal=goal_text)
+    
+    await show_summary(message, state)
+
+async def show_summary(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get("language", "ru")
+    
+    summary_text = f"""
+{TEXTS[lang]["summary"]}
+
+{TEXTS[lang]["name"]}: {data.get('name', 'N/A')}
+{TEXTS[lang]["phone"]}: {data.get('phone', 'N/A')}
+{TEXTS[lang]["level"]}: {data.get('level', 'N/A')}
+{TEXTS[lang]["time"]}: {data.get('time', 'N/A')}
+{TEXTS[lang]["goal"]}: {data.get('goal', 'N/A')}
+
+{TEXTS[lang]["probny_urok"]}
+"""
+    
+    await message.answer(
+        summary_text,
+        reply_markup=get_edit_keyboard(lang)
+    )
+    await state.set_state(RegistrationStates.registration_summary)
+
+async def handle_edit_callback(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get("language", "ru")
+    
+    if callback.data == "edit_name":
+        await callback.message.answer(TEXTS[lang]["enter_name"])
+        await state.set_state(RegistrationStates.waiting_for_name)
+    elif callback.data == "edit_phone":
+        await callback.message.answer(TEXTS[lang]["enter_phone"])
+        await state.set_state(RegistrationStates.waiting_for_phone)
+    elif callback.data == "edit_level":
+        await callback.message.answer(
+            TEXTS[lang]["choose_level"],
+            reply_markup=get_level_keyboard(lang)
+        )
+        await state.set_state(RegistrationStates.waiting_for_level)
+    elif callback.data == "edit_time":
+        await callback.message.answer(
+            TEXTS[lang]["enter_time"],
+            reply_markup=get_time_keyboard(lang)
+        )
+        await state.set_state(RegistrationStates.waiting_for_time)
+    elif callback.data == "edit_goal":
+        await callback.message.answer(
+            TEXTS[lang]["enter_goal"],
+            reply_markup=get_goal_keyboard(lang)
+        )
+        await state.set_state(RegistrationStates.waiting_for_goal)
+    elif callback.data == "confirm_registration":
+        await confirm_registration(callback.message, state)
+    
+    await callback.answer()
+
+async def confirm_registration(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get("language", "ru")
+    
+    saved_to_sheets = False
+    
+    # Сохраняем в Google Sheets
+    if sheet:
+        try:
+            sheet.append_row([
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                data.get('name', ''),
+                data.get('phone', ''),
+                data.get('level', ''),
+                data.get('time', ''),
+                'Telegram',
+                'Новая',
+                data.get('goal', '')
+            ])
+            logger.info(f"Registration saved for {data.get('name')}")
+            saved_to_sheets = True
+        except Exception as e:
+            logger.error(f"Google Sheets error: {e}")
+            await message.answer(f"{TEXTS[lang]['sheets_error']}: {str(e)}")
+    else:
+        logger.warning("Google Sheets not configured")
+        await message.answer(TEXTS[lang]["sheets_not_configured"])
+    
+    # Уведомление админу
+    if ADMIN_CHAT_ID:
+        admin_text = f"""
+{TEXTS[lang]["admin_notification"]}
+
+{TEXTS[lang]["name"]}: {data.get('name')}
+{TEXTS[lang]["phone"]}: {data.get('phone')}
+{TEXTS[lang]["level"]}: {data.get('level')}
+{TEXTS[lang]["time"]}: {data.get('time')}
+{TEXTS[lang]["goal"]}: {data.get('goal')}
+"""
+        try:
+            await message.bot.send_message(
+                ADMIN_CHAT_ID,
+                admin_text,
+                reply_markup=InlineKeyboardMarkup(
+                    inline_keyboard=[[InlineKeyboardButton(text=TEXTS[lang]["call_admin"], callback_data="call_admin")]]
+                )
+            )
+            logger.info(f"Admin notified about registration from {message.from_user.id}")
+        except Exception as e:
+            logger.error(f"Failed to notify admin: {e}")
+    
+    await message.answer(TEXTS[lang]["success"])
+    await message.answer(
+        TEXTS[lang]["main_menu"],
+        reply_markup=get_main_menu_keyboard(lang)
+    )
+    await state.set_state(RegistrationStates.main_menu)
+
+async def handle_main_menu(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get("language", "ru")
+    
+    if TEXTS[lang]["faq"] in message.text:
+        await message.answer(
+            TEXTS[lang]["faq"],
+            reply_markup=get_faq_keyboard(lang)
+        )
+        await state.set_state(RegistrationStates.faq_view)
+    elif TEXTS[lang]["ask_question"] in message.text:
+        await message.answer(TEXTS[lang]["ask_question_text"])
+        await state.set_state(RegistrationStates.ask_question)
+    elif TEXTS[lang]["schedule"] in message.text:
+        await message.answer(
+            TEXTS[lang]["schedule_title"],
+            reply_markup=get_schedule_keyboard(lang)
+        )
+        await state.set_state(RegistrationStates.schedule_view)
+    elif TEXTS[lang]["reviews"] in message.text:
+        reviews_text = f"""
+{TEXTS[lang]["reviews_title"]}
+
+{TEXTS[lang]["review_1"]}
+
+{TEXTS[lang]["review_2"]}
+
+{TEXTS[lang]["review_3"]}
+"""
+        await message.answer(
+            reviews_text,
+            reply_markup=get_reviews_keyboard(lang)
+        )
+        await state.set_state(RegistrationStates.reviews_view)
+    elif TEXTS[lang]["prices"] in message.text:
+        prices_text = f"""
+{TEXTS[lang]["prices_title"]}
+
+{TEXTS[lang]["price_1"]}
+{TEXTS[lang]["price_2"]}
+{TEXTS[lang]["price_3"]}
+{TEXTS[lang]["price_4"]}
+"""
+        await message.answer(
+            prices_text,
+            reply_markup=get_prices_keyboard(lang)
+        )
+        await state.set_state(RegistrationStates.prices_view)
+    elif TEXTS[lang]["contacts"] in message.text:
+        contacts_text = f"""
+{TEXTS[lang]["contacts_title"]}
+
+{TEXTS[lang]["contact_phone"]}
+{TEXTS[lang]["contact_email"]}
+{TEXTS[lang]["contact_instagram"]}
+{TEXTS[lang]["contact_location"]}
+"""
+        await message.answer(
+            contacts_text,
+            reply_markup=get_contacts_keyboard(lang)
+        )
+        await state.set_state(RegistrationStates.contacts_view)
+    elif TEXTS[lang]["register"] in message.text:
+        await message.answer(TEXTS[lang]["enter_name"])
+        await state.set_state(RegistrationStates.waiting_for_name)
+    elif TEXTS[lang]["settings"] in message.text:
+        await message.answer(
+            TEXTS[lang]["main_menu"],
+            reply_markup=get_settings_keyboard(lang)
+        )
+        await state.set_state(RegistrationStates.settings_view)
+
+async def handle_ask_question(message: types.Message, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get("language", "ru")
+    
+    question_text = message.text.strip()
+    
+    # Валидация
+    if not question_text or len(question_text) < 3:
+        await message.answer(TEXTS[lang]["invalid_question"])
+        return
+    
+    # Сохраняем вопрос в логи
+    logger.info(f"Question from user {message.from_user.id}: {question_text}")
+    
+    # Уведомление админу
+    if ADMIN_CHAT_ID:
+        admin_text = f"""
+{TEXTS[lang]["admin_question"]}
+
+Пользователь: {message.from_user.first_name}
+Вопрос: {question_text}
+"""
+        try:
+            await message.bot.send_message(ADMIN_CHAT_ID, admin_text)
+            logger.info(f"Admin notified about question from {message.from_user.id}")
+        except Exception as e:
+            logger.error(f"Failed to notify admin: {e}")
+    
+    await message.answer(TEXTS[lang]["question_received"])
+    await message.answer(
+        TEXTS[lang]["main_menu"],
+        reply_markup=get_main_menu_keyboard(lang)
+    )
+    await state.set_state(RegistrationStates.main_menu)
+
+async def handle_faq_callback(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get("language", "ru")
+    
+    faq_map = {
+        "faq_1": ("faq_q1", "faq_a1"),
+        "faq_2": ("faq_q2", "faq_a2"),
+        "faq_3": ("faq_q3", "faq_a3"),
+        "faq_4": ("faq_q4", "faq_a4"),
+    }
+    
+    if callback.data in faq_map:
+        q_key, a_key = faq_map[callback.data]
+        answer = f"{TEXTS[lang][q_key]}\n\n{TEXTS[lang][a_key]}"
+        await callback.message.answer(answer, reply_markup=get_faq_keyboard(lang))
+    elif callback.data == "back_to_menu":
+        await callback.message.answer(
+            TEXTS[lang]["main_menu"],
+            reply_markup=get_main_menu_keyboard(lang)
+        )
+        await state.set_state(RegistrationStates.main_menu)
+    
+    await callback.answer()
+
+async def handle_schedule_callback(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get("language", "ru")
+    
+    schedule_map = {
+        "schedule_mon": f"{TEXTS[lang]['monday']}: 10:00 (Beginner), 14:00 (Intermediate), 18:00 (Upper)",
+        "schedule_tue": f"{TEXTS[lang]['tuesday']}: 09:00 (Elementary), 15:00 (Intermediate), 19:00 (Beginner)",
+        "schedule_wed": f"{TEXTS[lang]['wednesday']}: 11:00 (Beginner), 16:00 (Upper), 20:00 (Elementary)",
+        "schedule_thu": f"{TEXTS[lang]['thursday']}: 10:00 (Intermediate), 14:30 (Beginner), 18:30 (Upper)",
+        "schedule_fri": f"{TEXTS[lang]['friday']}: 09:30 (Upper), 13:00 (Elementary), 17:00 (Intermediate)",
+        "schedule_sat": f"{TEXTS[lang]['saturday']}: 10:00 (Beginner), 12:00 (Intermediate), 14:00 (Upper)",
+        "schedule_sun": f"{TEXTS[lang]['sunday']}: 11:00 (Elementary), 15:00 (Beginner), 18:00 (Intermediate)",
+    }
+    
+    if callback.data in schedule_map:
+        await callback.message.answer(schedule_map[callback.data], reply_markup=get_schedule_keyboard(lang))
+    elif callback.data == "back_to_menu":
+        await callback.message.answer(
+            TEXTS[lang]["main_menu"],
+            reply_markup=get_main_menu_keyboard(lang)
+        )
+        await state.set_state(RegistrationStates.main_menu)
+    
+    await callback.answer()
+
+async def handle_reviews_callback(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get("language", "ru")
+    
+    if callback.data == "register":
+        await callback.message.answer(TEXTS[lang]["enter_name"])
+        await state.set_state(RegistrationStates.waiting_for_name)
+    elif callback.data == "back_to_menu":
+        await callback.message.answer(
+            TEXTS[lang]["main_menu"],
+            reply_markup=get_main_menu_keyboard(lang)
+        )
+        await state.set_state(RegistrationStates.main_menu)
+    
+    await callback.answer()
+
+async def handle_prices_callback(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get("language", "ru")
+    
+    if callback.data == "register":
+        await callback.message.answer(TEXTS[lang]["enter_name"])
+        await state.set_state(RegistrationStates.waiting_for_name)
+    elif callback.data == "back_to_menu":
+        await callback.message.answer(
+            TEXTS[lang]["main_menu"],
+            reply_markup=get_main_menu_keyboard(lang)
+        )
+        await state.set_state(RegistrationStates.main_menu)
+    
+    await callback.answer()
+
+async def handle_contacts_callback(callback: types.CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    lang = data.get("language", "ru")
+    
+    if callback.data == "call_admin":
+        await callback.message.answer(
+            f"📱 {TEXTS[lang]['contact_phone']}\n\nОтправьте сообщение или позвоните!"
+        )
+    elif callback.data == "back_to_menu":
+        await callback.message.answer(
+            TEXTS[lang]["main_menu"],
+            reply_markup=get_main_menu_keyboard(lang)
+        )
+        await state.set_state(RegistrationStates.main_menu)
+    
+    await callback.answer()
+
+async def handle_settings_callback(callback: types.CallbackQuery, state: FSMContext):
+    if callback.data == "change_language":
+        await callback.message.answer(
+            TEXTS["ru"]["choose_language"],
+            reply_markup=get_language_keyboard()
+        )
+        await state.set_state(RegistrationStates.waiting_for_language)
+    elif callback.data == "back_to_menu":
+        data = await state.get_data()
+        lang = data.get("language", "ru")
+        await callback.message.answer(
+            TEXTS[lang]["main_menu"],
+            reply_markup=get_main_menu_keyboard(lang)
+        )
+        await state.set_state(RegistrationStates.main_menu)
+    
+    await callback.answer()
+
+async def main():
+    bot = Bot(token=BOT_TOKEN)
+    dp = Dispatcher()
+    
+    # Команды
+    dp.message.register(start, Command("start"))
+    
+    # Языки
+    dp.message.register(
+        handle_language,
+        RegistrationStates.waiting_for_language
+    )
+    
+    # Выбор регистрации
+    dp.message.register(
+        handle_registration_choice,
+        RegistrationStates.waiting_for_registration_choice
+    )
+    
+    # Регистрация
+    dp.message.register(handle_name, RegistrationStates.waiting_for_name)
+    dp.message.register(handle_phone, RegistrationStates.waiting_for_phone)
+    dp.message.register(handle_level, RegistrationStates.waiting_for_level)
+    dp.message.register(handle_time, RegistrationStates.waiting_for_time)
+    dp.message.register(handle_goal, RegistrationStates.waiting_for_goal)
+    
+    # Главное меню
+    dp.message.register(handle_main_menu, RegistrationStates.main_menu)
+    
+    # Задать вопрос
+    dp.message.register(handle_ask_question, RegistrationStates.ask_question)
+    
+async def main():
+# ===== СОЗДАНИЕ BOT И DISPATCHER (ВНЕ ФУНКЦИИ) =====
+bot = Bot(token=BOT_TOKEN)
+dp = Dispatcher(storage=MemoryStorage())
+
+# ===== РЕГИСТРАЦИЯ ВСЕХ ОБРАБОТЧИКОВ (ВНЕ ФУНКЦИИ) =====
+dp.message.register(handle_start, Command("start"))
+dp.message.register(handle_language_selection, RegistrationStates.waiting_for_language)
+# ... все остальные регистрации ...
+
+# Callbacks с StateFilter (СПЕЦИФИЧНЫЕ - ПЕРВЫМИ)
+dp.callback_query.register(handle_edit_callback, RegistrationStates.registration_summary)
+dp.callback_query.register(handle_faq_callback, RegistrationStates.faq_view)
+# ... остальные callback'и ...
+
+# Fallback для неизвестных callback'ов (ПОСЛЕДНИМ!)
+async def handle_unknown_callback(callback: types.CallbackQuery):
+    logger.warning(f"Unknown callback: {callback.data}")
+    await callback.answer("❌ Неизвестная команда", show_alert=True)
+
+dp.callback_query.register(handle_unknown_callback)
+
+
+# ===== ФУНКЦИЯ MAIN (ТОЛЬКО ЗАПУСК) =====
+async def main():
+    await dp.start_polling(bot)
+
+
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(main())
