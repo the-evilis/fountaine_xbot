@@ -514,11 +514,53 @@ async def show_main_menu(message: types.Message, state: FSMContext, lang: str):
     await state.set_state(RegistrationStates.main_menu)
 
 
+def _build_static_school_info(lang: str) -> str:
+    t = TEXTS[lang]
+    if lang == "ky":
+        return (
+            "=== МЕКТЕП ЖӨНҮНДӨ МААЛЫМАТ ===\n\n"
+            "БААЛАР:\n"
+            f"- {t['price_1']}\n"
+            f"- {t['price_2']}\n"
+            f"- {t['price_3']}\n"
+            f"- {t['price_4']}\n\n"
+            "БАЙЛАНЫШ:\n"
+            f"- {t['contact_phone']}\n"
+            f"- {t['contact_email']}\n"
+            f"- {t['contact_instagram']}\n"
+            f"- {t['contact_location']}\n\n"
+            "КЕП БЕРИЛҮҮЧҮ СУРООЛОР:\n"
+            f"Q: {t['faq_q1']}\nA: {t['faq_a1']}\n\n"
+            f"Q: {t['faq_q2']}\nA: {t['faq_a2']}\n\n"
+            f"Q: {t['faq_q3']}\nA: {t['faq_a3']}\n\n"
+            f"Q: {t['faq_q4']}\nA: {t['faq_a4']}\n"
+        )
+    else:
+        return (
+            "=== ИНФОРМАЦИЯ О ШКОЛЕ ===\n\n"
+            "ЦЕНЫ:\n"
+            f"- {t['price_1']}\n"
+            f"- {t['price_2']}\n"
+            f"- {t['price_3']}\n"
+            f"- {t['price_4']}\n\n"
+            "КОНТАКТЫ:\n"
+            f"- {t['contact_phone']}\n"
+            f"- {t['contact_email']}\n"
+            f"- {t['contact_instagram']}\n"
+            f"- {t['contact_location']}\n\n"
+            "ЧАСТО ЗАДАВАЕМЫЕ ВОПРОСЫ:\n"
+            f"Q: {t['faq_q1']}\nA: {t['faq_a1']}\n\n"
+            f"Q: {t['faq_q2']}\nA: {t['faq_a2']}\n\n"
+            f"Q: {t['faq_q3']}\nA: {t['faq_a3']}\n\n"
+            f"Q: {t['faq_q4']}\nA: {t['faq_a4']}\n"
+        )
+
+
 async def ask_chatgpt_rag(question: str, lang: str) -> str:
     if not client:
         return None
     try:
-        context = ""
+        context = _build_static_school_info(lang)
         if faq_sheet:
             try:
                 all_rows = await asyncio.to_thread(faq_sheet.get_all_values)
@@ -539,13 +581,13 @@ async def ask_chatgpt_rag(question: str, lang: str) -> str:
                             relevant_answers.append(f"Q: {row[0]}\nA: {row[1]}")
 
                 if relevant_answers:
-                    context = "Информация о школе:\n\n" + "\n\n".join(relevant_answers)
+                    context += "\n\nДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ ИЗ FAQ:\n\n" + "\n\n".join(relevant_answers)
                     logger.info(f"RAG: found {len(relevant_answers)} relevant answers")
                 else:
-                    # Берём весь FAQ как контекст
+                    # Берём весь FAQ как дополнительный контекст
                     all_qa = [f"Q: {r[0]}\nA: {r[1]}" for r in all_rows[1:] if len(r) >= 2 and r[0] and r[1]]
                     if all_qa:
-                        context = "Информация о школе:\n\n" + "\n\n".join(all_qa)
+                        context += "\n\nДОПОЛНИТЕЛЬНАЯ ИНФОРМАЦИЯ:\n\n" + "\n\n".join(all_qa)
                     logger.info("RAG: using full FAQ as context")
 
             except Exception as e:
@@ -557,19 +599,22 @@ async def ask_chatgpt_rag(question: str, lang: str) -> str:
                 "МААНИЛҮҮ ЭРЕЖЕЛЕР:\n"
                 "1. Төмөндөгү маалымат базасынан ГАНА жооп бер.\n"
                 "2. Өз билимиңди же болжолдорду КОЛДОНБА.\n"
-                "3. Эгер жооп базада болсо — аны ТЫК берип кой.\n"
-                "4. Эгер базада маалымат жок болсо — так: \"Мен бул сурамга жооп бере албайм\" деп жооп бер.\n\n"
+                "3. Эгер жооп базада болсо — аны ДАРОО ТЫК цитирле, кайра жазба, умтулба.\n"
+                "4. Баа жөнүндө суроо болсо — БААЛАР бөлүмүнөн так сан менен жооп бер.\n"
+                "5. Эгер базада маалымат жок болсо — так: \"Мен бул сурамга жооп бере албайм\" деп жооп бер.\n\n"
                 f"МААЛЫМАТ БАЗАСЫ:\n{context}"
             )
         else:
             system_prompt = (
                 "Ты помощник школы английского языка Fountaine English School.\n\n"
                 "СТРОГИЕ ПРАВИЛА:\n"
-                "1. Отвечай ТОЛЬКО на основе базы знаний ниже.\n"
+                "1. Отвечай ТОЛЬКО на основе данных ниже.\n"
                 "2. НЕ используй свои общие знания или домыслы.\n"
-                "3. Если ответ есть в базе — процитируй его ДОСЛОВНО, не перефразируй.\n"
-                "4. Если информации нет в базе — ответь ТОЧНО: \"Я не знаю ответ на этот вопрос\".\n\n"
-                f"БАЗА ЗНАНИЙ ШКОЛЫ:\n{context}"
+                "3. Если ответ есть в данных — процитируй его ТОЧНО с конкретными цифрами, не перефразируй уклончиво.\n"
+                "4. На вопрос о ценах — всегда давай точные суммы из раздела ЦЕНЫ ниже.\n"
+                "5. Никогда не отвечай «уточните у менеджера» если ответ есть в данных ниже.\n"
+                "6. Если информации действительно нет в данных — ответь ТОЧНО: \"Я не знаю ответ на этот вопрос\".\n\n"
+                f"ДАННЫЕ ШКОЛЫ:\n{context}"
             )
 
         response = client.chat.completions.create(
