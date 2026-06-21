@@ -136,11 +136,11 @@ TEXTS = {
         "back_to_menu": "🔖 Вернуться в меню",
         "cancel": "✖ Отмена",
 
-        "enter_name": "Введите ваше имя:",
-        "invalid_name": "Имя должно содержать только буквы. Попробуйте снова:",
-        "enter_phone": "Введите номер телефона:",
-        "invalid_phone": "Некорректный номер. Попробуйте снова (пример: +996 700 123 456):",
-        "choose_level": "Выберите ваш уровень английского:",
+        "enter_name": "👤 Введите ваше имя:",
+        "invalid_name": "⚠️ Имя должно содержать только буквы. Попробуйте снова:",
+        "enter_phone": "📱 Введите номер телефона:",
+        "invalid_phone": "⚠️ Некорректный номер. Попробуйте снова (пример: +996 700 123 456):",
+        "choose_level": "🎓 Выберите ваш уровень английского:",
         "level_beginner": "🌱 Beginner (A1)",
         "level_elementary": "📖 Elementary (A2)",
         "level_intermediate": "🎯 Intermediate (B1)",
@@ -148,13 +148,13 @@ TEXTS = {
         "level_unknown": "❓ Не знаю",
         "level_test": "🧪 Пройти тест",
         "level_test_msg": "Пройдите бесплатный тест на определение уровня:\nhttps://www.cambridgeenglish.org/test-your-english/\n\nПосле прохождения выберите свой уровень 👇",
-        "enter_time": "Когда удобно заниматься?",
+        "enter_time": "⏰ Когда удобно заниматься?",
         "time_morning": "🌅 Утро (9:00–12:00)",
         "time_afternoon": "☀️ День (12:00–17:00)",
         "time_evening": "🌙 Вечер (17:00–21:00)",
         "time_flexible": "🔄 Гибкое расписание",
         "invalid_time": "Пожалуйста, выберите время из предложенных вариантов:",
-        "enter_goal": "Какая ваша цель?",
+        "enter_goal": "🎯 Какая ваша цель?",
         "goal_exam": "📚 Подготовка к экзамену",
         "goal_conversation": "💬 Разговорный английский",
         "goal_business": "💼 Деловой английский",
@@ -247,11 +247,11 @@ TEXTS = {
         "back_to_menu": "🔖 Менюгө кайтуу",
         "cancel": "✖ Жокко чыгаруу",
 
-        "enter_name": "Атыңызды жазыңыз:",
-        "invalid_name": "Ат тек тамгалардан турушу керек. Кайра аракет кылыңыз:",
-        "enter_phone": "Телефон номериңизди жазыңыз:",
-        "invalid_phone": "Туура эмес номер. Кайра аракет кылыңыз (+996 700 123 456):",
-        "choose_level": "Англис тилиңиздин деңгээлин тандаңыз:",
+        "enter_name": "👤 Атыңызды жазыңыз:",
+        "invalid_name": "⚠️ Ат тек тамгалардан турушу керек. Кайра аракет кылыңыз:",
+        "enter_phone": "📱 Телефон номериңизди жазыңыз:",
+        "invalid_phone": "⚠️ Туура эмес номер. Кайра аракет кылыңыз (+996 700 123 456):",
+        "choose_level": "🎓 Англис тилиңиздин деңгээлин тандаңыз:",
         "level_beginner": "🌱 Beginner (A1)",
         "level_elementary": "📖 Elementary (A2)",
         "level_intermediate": "🎯 Intermediate (B1)",
@@ -259,13 +259,13 @@ TEXTS = {
         "level_unknown": "❓ Билбейм",
         "level_test": "🧪 Тест тапшыруу",
         "level_test_msg": "Акысыз деңгээл аныктоо тестин тапшырыңыз:\nhttps://www.cambridgeenglish.org/test-your-english/\n\nТапшыргандан кийин деңгээлиңизди тандаңыз 👇",
-        "enter_time": "Качан окуу ыңайлуу?",
+        "enter_time": "⏰ Качан окуу ыңайлуу?",
         "time_morning": "🌅 Таңкы (9:00–12:00)",
         "time_afternoon": "☀️ Күндүз (12:00–17:00)",
         "time_evening": "🌙 Кечки (17:00–21:00)",
         "time_flexible": "🔄 Ийкемдүү расписание",
         "invalid_time": "Убакытты сунушталган варианттардан тандаңыз:",
-        "enter_goal": "Сиздин максатыңыз кандай?",
+        "enter_goal": "🎯 Сиздин максатыңыз кандай?",
         "goal_exam": "📚 Экзаменге даярдык",
         "goal_conversation": "💬 Сүйлөшүү англисчеси",
         "goal_business": "💼 Иш англисчеси",
@@ -373,8 +373,8 @@ def get_yes_no_keyboard(lang):
 def get_main_menu_keyboard(lang):
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text=TEXTS[lang]["faq"]), KeyboardButton(text=TEXTS[lang]["ask_question"])],
-            [KeyboardButton(text=TEXTS[lang]["register"]), KeyboardButton(text=TEXTS[lang]["prices"])],
+            [KeyboardButton(text=TEXTS[lang]["ask_question"]), KeyboardButton(text=TEXTS[lang]["register"])],
+            [KeyboardButton(text=TEXTS[lang]["faq"]), KeyboardButton(text=TEXTS[lang]["prices"])],
             [KeyboardButton(text=TEXTS[lang]["schedule"]), KeyboardButton(text=TEXTS[lang]["reviews"])],
             [KeyboardButton(text=TEXTS[lang]["contacts"]), KeyboardButton(text=TEXTS[lang]["settings"])],
         ],
@@ -397,10 +397,8 @@ def get_level_keyboard(lang):
 def get_time_keyboard(lang):
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text=TEXTS[lang]["time_morning"])],
-            [KeyboardButton(text=TEXTS[lang]["time_afternoon"])],
-            [KeyboardButton(text=TEXTS[lang]["time_evening"])],
-            [KeyboardButton(text=TEXTS[lang]["time_flexible"])],
+            [KeyboardButton(text=TEXTS[lang]["time_morning"]), KeyboardButton(text=TEXTS[lang]["time_afternoon"])],
+            [KeyboardButton(text=TEXTS[lang]["time_evening"]), KeyboardButton(text=TEXTS[lang]["time_flexible"])],
             [KeyboardButton(text=TEXTS[lang]["cancel"])],
         ],
         resize_keyboard=True
@@ -410,10 +408,8 @@ def get_time_keyboard(lang):
 def get_goal_keyboard(lang):
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text=TEXTS[lang]["goal_exam"])],
-            [KeyboardButton(text=TEXTS[lang]["goal_conversation"])],
-            [KeyboardButton(text=TEXTS[lang]["goal_business"])],
-            [KeyboardButton(text=TEXTS[lang]["goal_general"])],
+            [KeyboardButton(text=TEXTS[lang]["goal_exam"]), KeyboardButton(text=TEXTS[lang]["goal_conversation"])],
+            [KeyboardButton(text=TEXTS[lang]["goal_business"]), KeyboardButton(text=TEXTS[lang]["goal_general"])],
             [KeyboardButton(text=TEXTS[lang]["goal_other"])],
             [KeyboardButton(text=TEXTS[lang]["cancel"])],
         ],
@@ -896,6 +892,8 @@ async def handle_main_menu(message: types.Message, state: FSMContext):
     data = await state.get_data()
     lang = data.get("language", "ru")
     text = message.text
+    if not text:
+        return
 
     if TEXTS[lang]["faq"] in text:
         await message.answer(TEXTS[lang]["faq"], reply_markup=get_faq_keyboard(lang))
