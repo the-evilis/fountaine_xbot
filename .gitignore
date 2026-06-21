@@ -20,3 +20,5 @@ venv.bak/
 *~
 # Logs
 *.log
+# Config with secrets
+config.py
