@@ -117,7 +117,7 @@ class RegistrationStates(StatesGroup):
 
 TEXTS = {
     "ru": {
-        "welcome": "✨ Добро пожаловать в Fountaine English School!",
+        "welcome": "✨ Добро пожаловать в Flow English School!",
         "choose_language": "Выберите язык / Тилди тандаңыз:",
         "russian": "🇷🇺 Русский",
         "kyrgyz": "🇰🇬 Кыргызский",
@@ -228,7 +228,7 @@ TEXTS = {
         "unknown_command": "Используйте кнопки меню или /start для перезапуска.",
     },
     "ky": {
-        "welcome": "✨ Fountaine English School'ге кош келиңиз!",
+        "welcome": "✨ Flow English School'ге кош келиңиз!",
         "choose_language": "Тилди тандаңыз / Выберите язык:",
         "russian": "🇷🇺 Русский",
         "kyrgyz": "🇰🇬 Кыргызский",
@@ -635,7 +635,7 @@ async def ask_chatgpt_rag(question: str, lang: str, username: str = "", full_nam
 
         if lang == "ky":
             system_prompt = (
-                "Сен Fountaine English School мектебинин жардамчысысың.\n\n"
+                "Сен Flow English School мектебинин жардамчысысың.\n\n"
                 "МААНИЛҮҮ ЭРЕЖЕЛЕР:\n"
                 "1. Төмөндөгү маалымат базасынан ГАНА жооп бер.\n"
                 "2. Өз билимиңди же болжолдорду КОЛДОНБА.\n"
@@ -646,7 +646,7 @@ async def ask_chatgpt_rag(question: str, lang: str, username: str = "", full_nam
             )
         else:
             system_prompt = (
-                "Ты помощник школы английского языка Fountaine English School.\n\n"
+                "Ты помощник школы английского языка Flow English School.\n\n"
                 "СТРОГИЕ ПРАВИЛА:\n"
                 "1. Отвечай ТОЛЬКО на основе данных ниже.\n"
                 "2. НЕ используй свои общие знания или домыслы.\n"
@@ -1103,7 +1103,7 @@ async def ask_command(message: types.Message, state: FSMContext):
 async def help_command(message: types.Message):
     help_text = (
         "ℹ️ *Справка по боту*\n\n"
-        "Этот бот помогает записаться на пробный урок в Fountaine English School "
+        "Этот бот помогает записаться на пробный урок в Flow English School "
         "и отвечает на вопросы о школе.\n\n"
         "*Доступные команды:*\n"
         "/start — перезапустить бота\n"
