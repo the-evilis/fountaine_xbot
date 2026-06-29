@@ -124,7 +124,7 @@ TEXTS = {
         "want_register": "Хотите записаться на бесплатный пробный урок?",
         "yes": "✅ Да",
         "no": "🙅 Нет, спасибо",
-        "main_menu": "📌 Главное меню",
+        "main_menu": "📌 Главное меню\n\n🤖 Вы можете написать любой вопрос прямо в чат — AI ответит мгновенно.",
         "faq": "📚 F.A.Q.",
         "ask_question": "🤖 Спросить AI",
         "register": "🎫 Записаться",
@@ -235,7 +235,7 @@ TEXTS = {
         "want_register": "Акысыз сынак сабакка катталгыңыз келеби?",
         "yes": "✅ Ооба",
         "no": "🙅 Жок, рахмат",
-        "main_menu": "📌 Башкы меню",
+        "main_menu": "📌 Башкы меню\n\n🤖 Каалаган суроону түздөн-түз чатка жазсаңыз болот — AI дароо жооп берет.",
         "faq": "📚 F.A.Q.",
         "ask_question": "🤖 AI Жардамчы",
         "register": "🎫 Катталуу",
@@ -371,6 +371,7 @@ def get_yes_no_keyboard(lang):
 
 
 def get_main_menu_keyboard(lang):
+    placeholder = "Напишите любой вопрос — AI ответит..." if lang == "ru" else "Каалаган суроону жазыңыз — AI жооп берет..."
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text=TEXTS[lang]["ask_question"]), KeyboardButton(text=TEXTS[lang]["register"])],
@@ -378,7 +379,8 @@ def get_main_menu_keyboard(lang):
             [KeyboardButton(text=TEXTS[lang]["schedule"]), KeyboardButton(text=TEXTS[lang]["reviews"])],
             [KeyboardButton(text=TEXTS[lang]["contacts"]), KeyboardButton(text=TEXTS[lang]["settings"])],
         ],
-        resize_keyboard=True
+        resize_keyboard=True,
+        input_field_placeholder=placeholder
     )
 
 
@@ -948,7 +950,19 @@ async def handle_main_menu(message: types.Message, state: FSMContext):
         await state.set_state(RegistrationStates.settings_view)
 
     else:
-        await message.answer(TEXTS[lang]["unknown_command"])
+        # Любой текст в главном меню — отправить в AI
+        await message.bot.send_chat_action(message.chat.id, "typing")
+        username = message.from_user.username or ""
+        full_name = message.from_user.full_name or ""
+        answer = await ask_chatgpt_rag(text, lang, username=username, full_name=full_name)
+        if answer:
+            await message.answer(answer)
+        else:
+            await message.answer(
+                f"{TEXTS[lang]['ai_dont_know']}\n\n"
+                f"{TEXTS[lang]['contact_phone']}\n"
+                f"{TEXTS[lang]['contact_email']}"
+            )
 
 
 async def handle_ask_question(message: types.Message, state: FSMContext):
