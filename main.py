@@ -208,9 +208,9 @@ TEXTS = {
         "record_now": "🎫 Записаться",
 
         "contacts_title": "📌 Контакты:",
-        "contact_phone": "📞 Телефон: +996 700 208 295",
-        "contact_email": "✉️ Email: info@flow.ai",
-        "contact_instagram": "Instagram: @fountaine.ai",
+        "contact_phone": "",
+        "contact_email": "✉️ Email: flow_kg1@gmail.com",
+        "contact_instagram": "",
         "contact_location": "📍 Бишкек, ул. Чуй 75",
         "call_admin": "📞 Позвонить администратору",
 
@@ -319,10 +319,10 @@ TEXTS = {
         "record_now": "🎫 Катталуу",
 
         "contacts_title": "📌 Байланыш:",
-        "contact_phone": "📞 Телефон: +996 700 208 295",
-        "contact_email": "✉️ Email: info@flow.ai",
-        "contact_instagram": "Instagram: @fountaine.ai",
-        "contact_location": "📍 Бишкек, Чуй көчөсү 75",
+        "contact_phone": "",
+        "contact_email": "✉️ Email: flow_kg1@gmail.com",
+        "contact_instagram": "",
+        "contact_location": "📍 Бишкек, Чүй көчөсү 75",
         "call_admin": "📞 Администраторго чалуу",
 
         "ask_question_text": "✨ Суроонузду жазыңыз — AI азыр эле жооп берет:",
@@ -931,13 +931,12 @@ async def handle_main_menu(message: types.Message, state: FSMContext):
         await state.set_state(RegistrationStates.prices_view)
 
     elif TEXTS[lang]["contacts"] in text:
-        contacts_text = (
-            f"{TEXTS[lang]['contacts_title']}\n\n"
-            f"{TEXTS[lang]['contact_phone']}\n"
-            f"{TEXTS[lang]['contact_email']}\n"
-            f"{TEXTS[lang]['contact_instagram']}\n"
-            f"{TEXTS[lang]['contact_location']}"
-        )
+        lines = [TEXTS[lang]['contacts_title'], ""]
+        for key in ["contact_phone", "contact_email", "contact_instagram", "contact_location"]:
+            val = TEXTS[lang][key]
+            if val:
+                lines.append(val)
+        contacts_text = "\n".join(lines)
         await message.answer(contacts_text, reply_markup=get_contacts_keyboard(lang))
         await state.set_state(RegistrationStates.contacts_view)
 
